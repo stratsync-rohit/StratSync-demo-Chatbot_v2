@@ -9,7 +9,7 @@ This is the **frontend** for the StratSync Chatbot project.
 
 ### 1. Clone the repository
 ```bash
-git clone https://github.com/stratsync-rohit/StratSync-Chatbot.git
+git clone https://github.com/stratsync-rohit/StratSync-demo-Chatbot_v2.git
 cd client
 
 ```
