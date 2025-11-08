@@ -8,16 +8,21 @@ import TypingIndicator from "./TypingIndicator";
 
 
 
+const BASE_URL = "https://ss-chatbot-service-431223872160.asia-southeast1.run.app";
+
 interface Message {
   id: string;
   content: string;
   sender: "user" | "assistant";
   timestamp: Date;
+  // optional structured table data parsed from API responses
+  table?: Array<Record<string, any>>;
 }
 
 const ChatWindow: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
+  const [summarizingId, setSummarizingId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const hasUserMessages = messages.some((msg) => msg.sender === "user");
@@ -46,14 +51,11 @@ const ChatWindow: React.FC = () => {
     
  console.log(content);
     try {
-      const response = await fetch(
-        "https://ss-chatbot-service-431223872160.asia-southeast1.run.app/chatbot/message",
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: content,
-        }
-      );
+      const response = await fetch(`${BASE_URL}/chatbot/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: content,
+      });
 
       console.log(response.status);
 
@@ -66,6 +68,38 @@ const ChatWindow: React.FC = () => {
 
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
+
+        // If backend returns { msg: 'Success', data: '...'} where data is a stringified JSON array,
+        // parse it and attach as structured table data so the UI can render a table.
+        if (
+          jsonData &&
+          (jsonData.msg === "Success" || jsonData.data) &&
+          typeof jsonData.data === "string"
+        ) {
+          // try to parse the data field which may itself be a JSON string
+          try {
+            const parsed = JSON.parse(jsonData.data);
+            if (Array.isArray(parsed)) {
+              data = ""; // we'll render table instead of text
+              const assistantMessage: Message = {
+                id: (Date.now() + 1).toString(),
+                content: "",
+                sender: "assistant",
+                timestamp: new Date(),
+                table: parsed,
+              };
+
+              setMessages((prev) => [...prev, assistantMessage]);
+              setIsTyping(false);
+              return;
+            }
+          } catch (e) {
+            // fall back to string
+            data = JSON.stringify(jsonData);
+          }
+        }
+
+        // default: if there's a reply field, prefer it; otherwise stringify the JSON
         data = jsonData.reply || JSON.stringify(jsonData);
       } else {
         data = await response.text();
@@ -95,6 +129,48 @@ const ChatWindow: React.FC = () => {
       ]);
     } finally {
       setIsTyping(false);
+    }
+  };
+
+  // Trigger a summarization by calling the backend /generate_summary/ endpoint
+  // The backend returns an HTML document string which we open in a new tab.
+  const handleSummarize = async (message: Message) => {
+    try {
+      setSummarizingId(message.id);
+
+      // Prepare payload similar to /chatbot/message: send the message content or table JSON
+      let body: string;
+      let contentType = "text/plain";
+
+      if (message.table && message.table.length > 0) {
+        body = JSON.stringify(message.table);
+        contentType = "application/json";
+      } else {
+        body = message.content || "";
+        contentType = "text/plain";
+      }
+
+      const resp = await fetch(`${BASE_URL}/generate_summary/`, {
+        method: "POST",
+        headers: { "Content-Type": contentType },
+        body,
+      });
+
+      if (!resp.ok) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const html = await resp.text();
+
+      // Open the returned HTML in a new tab by creating a blob URL
+      const blob = new Blob([html], { type: "text/html" });
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+    } catch (err: any) {
+      console.error("Error generating summary:", err);
+      alert(`Failed to generate summary: ${err?.message || err}`);
+    } finally {
+      setSummarizingId(null);
     }
   };
 
@@ -134,7 +210,12 @@ const ChatWindow: React.FC = () => {
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.map((message) => (
-            <MessageBubble key={message.id} message={message} />
+            <MessageBubble
+              key={message.id}
+              message={message}
+              onSummarize={() => handleSummarize(message)}
+              isSummarizing={summarizingId === message.id}
+            />
           ))}
           {isTyping && <TypingIndicator />}
           <div ref={messagesEndRef} />
