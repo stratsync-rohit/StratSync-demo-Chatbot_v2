@@ -69,18 +69,17 @@ const ChatWindow: React.FC = () => {
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
 
-        // If backend returns { msg: 'Success', data: '...'} where data is a stringified JSON array,
-        // parse it and attach as structured table data so the UI can render a table.
+        
         if (
           jsonData &&
           (jsonData.msg === "Success" || jsonData.data) &&
           typeof jsonData.data === "string"
         ) {
-          // try to parse the data field which may itself be a JSON string
+          
           try {
             const parsed = JSON.parse(jsonData.data);
             if (Array.isArray(parsed)) {
-              data = ""; // we'll render table instead of text
+              data = ""; 
               const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 content: "",
@@ -94,12 +93,12 @@ const ChatWindow: React.FC = () => {
               return;
             }
           } catch (e) {
-            // fall back to string
+            
             data = JSON.stringify(jsonData);
           }
         }
 
-        // default: if there's a reply field, prefer it; otherwise stringify the JSON
+       
         data = jsonData.reply || JSON.stringify(jsonData);
       } else {
         data = await response.text();
@@ -132,13 +131,11 @@ const ChatWindow: React.FC = () => {
     }
   };
 
-  // Trigger a summarization by calling the backend /generate_summary/ endpoint
-  // The backend returns an HTML document string which we open in a new tab.
+  
   const handleSummarize = async (message: Message) => {
     try {
       setSummarizingId(message.id);
 
-      // Prepare payload similar to /chatbot/message: send the message content or table JSON
       let body: string;
       let contentType = "text/plain";
 
@@ -162,7 +159,7 @@ const ChatWindow: React.FC = () => {
 
       const html = await resp.text();
 
-      // Open the returned HTML in a new tab by creating a blob URL
+    
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
       window.open(url, "_blank");
