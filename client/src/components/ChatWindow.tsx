@@ -156,11 +156,7 @@ const ChatWindow: React.FC = () => {
       });
 
      
-      // const respJson = await resp.json();
-      // console.log("Rohit: generate_summary respJson:", respJson.message);
-
-      // Read the response body once as text. The backend may return either
-      // raw HTML or a JSON object containing the HTML in a field (e.g. data).
+     
       const bodyText = await resp.text();
       console.log("Rohit generate_summary raw response:", bodyText);
 
@@ -169,8 +165,7 @@ const ChatWindow: React.FC = () => {
         throw new Error(`HTTP ${resp.status}: ${bodyText}`);
       }
 
-      // Prefer JSON.data if the response is JSON with a `data` field; otherwise
-      // treat the whole body as the HTML to render.
+    
       let html = bodyText;
       try {
         const maybeJson = JSON.parse(bodyText);
@@ -256,39 +251,8 @@ const ChatWindow: React.FC = () => {
               />
 
               {summaryForId === message.id && summaryHtml && (
-                <div className="mt-2 p-3 bg-red-50 border rounded">
-                  <div className="flex items-center justify-between mb-2">
-                    <h4 className="text-sm font-semibold">Generated Summary</h4>
-                    <div className="flex items-center space-x-2">
-                      {summaryBlobUrl && (
-                        <a
-                          href={summaryBlobUrl}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-sm px-3 py-1 border rounded bg-white"
-                        >
-                          Open in new tab
-                        </a>
-                      )}
-                      <button
-                        onClick={() => {
-                          if (summaryBlobUrl) {
-                            try {
-                              URL.revokeObjectURL(summaryBlobUrl);
-                            } catch (e) {
-                              /* ignore */
-                            }
-                          }
-                          setSummaryBlobUrl(null);
-                          setSummaryHtml(null);
-                          setSummaryForId(null);
-                        }}
-                        className="text-sm px-3 py-1 border rounded bg-white"
-                      >
-                        Close
-                      </button>
-                    </div>
-                  </div>
+                <div className="mt-2 p-3 bg-white border rounded">
+                  
 
                   <iframe
                     title={`summary-${message.id}`}
