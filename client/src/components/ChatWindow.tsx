@@ -8,7 +8,7 @@ import TypingIndicator from "./TypingIndicator";
 
 
 
-const BASE_URL = "https://ss-chatbot-service-431223872160.asia-southeast1.run.app";
+const BASE_URL = "http://136.110.18.214:8000";
 
 interface Message {
   id: string;
@@ -49,18 +49,22 @@ const ChatWindow: React.FC = () => {
     setIsTyping(true);
 
     
- console.log(content);
+ console.log("test", content);
     try {
-      const response = await fetch(`${BASE_URL}/chatbot/message`, {
+      const response = await fetch(`${BASE_URL}/process_user_query/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: content,
+        // send a proper JSON payload (server expects JSON) — previously a raw string was sent
+        body: JSON.stringify({ query: content }),
       });
 
-      console.log(response.status);
+      console.log("test", response.status);
 
       if (!response.ok) {
-        throw new Error(`HTTP ${response.status}`);
+        // capture server error body to help debugging (many backends return useful error details)
+        const errText = await response.text();
+        console.error("Server error response:", errText);
+        throw new Error(`HTTP ${response.status}: ${errText}`);
       }
 
       const contentType = response.headers.get("content-type");
@@ -136,25 +140,23 @@ const ChatWindow: React.FC = () => {
     try {
       setSummarizingId(message.id);
 
-      let body: string;
-      let contentType = "text/plain";
-
-      if (message.table && message.table.length > 0) {
-        body = JSON.stringify(message.table);
-        contentType = "application/json";
-      } else {
-        body = message.content || "";
-        contentType = "text/plain";
-      }
-
+      // Always send JSON to the backend: either { table } or { text }
+      // Many servers expect JSON and will return 422 for plain text bodies.
+      const payload = message.table && message.table.length > 0
+        ? { table: message.table }
+        : { text: message.content || "" };
+       console.log(" rohit Payload:", payload);
       const resp = await fetch(`${BASE_URL}/generate_summary/`, {
         method: "POST",
-        headers: { "Content-Type": contentType },
-        body,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
 
       if (!resp.ok) {
-        throw new Error(`HTTP ${resp.status}`);
+        // include server error response body for debugging
+        const errText = await resp.text();
+        console.error("generate_summary server error:", errText);
+        throw new Error(`HTTP ${resp.status}: ${errText}`);
       }
 
       const html = await resp.text();
