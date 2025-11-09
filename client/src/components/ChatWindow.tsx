@@ -178,10 +178,20 @@ const ChatWindow: React.FC = () => {
           }
         }
       } catch (e) {
-        // bodyText is not JSON — keep it as-is (HTML)
+       
       }
 
       
+      
+      try {
+       
+        html = html.replace(/^```(?:html)?\s*/i, "");
+        
+        html = html.replace(/\s*```\s*$/i, "");
+      } catch (e) {
+        
+      }
+
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
      
@@ -194,8 +204,7 @@ const ChatWindow: React.FC = () => {
       }
   setSummaryBlobUrl(url);
   setSummaryHtml(html);
-  // remember which message this summary belongs to so we can render it
-  // inline beneath that message instead of showing a popup.
+ 
   setSummaryForId(message.id);
     } catch (err: any) {
       console.error("Error generating summary:", err);
@@ -251,7 +260,7 @@ const ChatWindow: React.FC = () => {
               />
 
               {summaryForId === message.id && summaryHtml && (
-                <div className="mt-2 p-3 bg-white border rounded">
+                <div className="mt-2 p-1 bg-white border rounded">
                   
 
                   <iframe
