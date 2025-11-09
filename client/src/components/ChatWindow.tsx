@@ -1,12 +1,8 @@
-
-
 import React, { useState, useRef, useEffect } from "react";
 import Header from "./Header";
 import MessageBubble from "./MessageBubble";
 import InputBar from "./InputBar";
 import TypingIndicator from "./TypingIndicator";
-
-
 
 const BASE_URL = "http://136.110.18.214:8000";
 
@@ -15,14 +11,19 @@ interface Message {
   content: string;
   sender: "user" | "assistant";
   timestamp: Date;
-  // optional structured table data parsed from API responses
+ 
   table?: Array<Record<string, any>>;
+  originalRequestPayload?: any;
 }
 
 const ChatWindow: React.FC = () => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [isTyping, setIsTyping] = useState(false);
   const [summarizingId, setSummarizingId] = useState<string | null>(null);
+
+  const [summaryHtml, setSummaryHtml] = useState<string | null>(null);
+  const [summaryBlobUrl, setSummaryBlobUrl] = useState<string | null>(null);
+  const [summaryForId, setSummaryForId] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const hasUserMessages = messages.some((msg) => msg.sender === "user");
@@ -48,20 +49,19 @@ const ChatWindow: React.FC = () => {
     setMessages((prev) => [...prev, userMessage]);
     setIsTyping(true);
 
-    
- console.log("test", content);
+    console.log("Rohit Query:", content);
     try {
       const response = await fetch(`${BASE_URL}/process_user_query/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        // send a proper JSON payload (server expects JSON) — previously a raw string was sent
         body: JSON.stringify({ query: content }),
       });
 
-      console.log("test", response.status);
+      console.log("Rohit test", response.status);
+      console.log("Rohit Response:", response);
 
       if (!response.ok) {
-        // capture server error body to help debugging (many backends return useful error details)
+        
         const errText = await response.text();
         console.error("Server error response:", errText);
         throw new Error(`HTTP ${response.status}: ${errText}`);
@@ -73,23 +73,23 @@ const ChatWindow: React.FC = () => {
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
 
-        
         if (
           jsonData &&
           (jsonData.msg === "Success" || jsonData.data) &&
           typeof jsonData.data === "string"
         ) {
-          
           try {
             const parsed = JSON.parse(jsonData.data);
             if (Array.isArray(parsed)) {
-              data = ""; 
+              data = "";
               const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 content: "",
                 sender: "assistant",
                 timestamp: new Date(),
                 table: parsed,
+                
+                originalRequestPayload: { query: content },
               };
 
               setMessages((prev) => [...prev, assistantMessage]);
@@ -97,18 +97,15 @@ const ChatWindow: React.FC = () => {
               return;
             }
           } catch (e) {
-            
             data = JSON.stringify(jsonData);
           }
         }
 
-       
         data = jsonData.reply || JSON.stringify(jsonData);
       } else {
         data = await response.text();
       }
 
-      
       await new Promise((res) => setTimeout(res, 500));
 
       const assistantMessage: Message = {
@@ -116,6 +113,8 @@ const ChatWindow: React.FC = () => {
         content: data,
         sender: "assistant",
         timestamp: new Date(),
+      
+        originalRequestPayload: { query: content },
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
@@ -135,36 +134,74 @@ const ChatWindow: React.FC = () => {
     }
   };
 
-  
   const handleSummarize = async (message: Message) => {
     try {
       setSummarizingId(message.id);
 
-      // Always send JSON to the backend: either { table } or { text }
-      // Many servers expect JSON and will return 422 for plain text bodies.
-      const payload = message.table && message.table.length > 0
-        ? { table: message.table }
-        : { text: message.content || "" };
-       console.log(" rohit Payload:", payload);
+      const orig = message.originalRequestPayload;
+
+      const queryStr = orig && typeof orig.query === "string" ? orig.query : message.content || "";
+
+      // per current behavior the payload's `data` value is set below
+      // (was previously computed from orig/message.table/message.content)
+      const dataToSend = "string";
+
+  const payload: any = { query: queryStr, data: dataToSend };
+
+      // console.log("Rohit generate_summary request payload:", payload);
       const resp = await fetch(`${BASE_URL}/generate_summary/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
 
+     
+      // const respJson = await resp.json();
+      // console.log("Rohit: generate_summary respJson:", respJson.message);
+
+      // Read the response body once as text. The backend may return either
+      // raw HTML or a JSON object containing the HTML in a field (e.g. data).
+      const bodyText = await resp.text();
+      console.log("Rohit generate_summary raw response:", bodyText);
+
       if (!resp.ok) {
-        // include server error response body for debugging
-        const errText = await resp.text();
-        console.error("generate_summary server error:", errText);
-        throw new Error(`HTTP ${resp.status}: ${errText}`);
+        console.error("generate_summary server error:", bodyText);
+        throw new Error(`HTTP ${resp.status}: ${bodyText}`);
       }
 
-      const html = await resp.text();
+      // Prefer JSON.data if the response is JSON with a `data` field; otherwise
+      // treat the whole body as the HTML to render.
+      let html = bodyText;
+      try {
+        const maybeJson = JSON.parse(bodyText);
+        if (maybeJson && typeof maybeJson === "object") {
+          if (typeof maybeJson.data === "string" && maybeJson.data.trim() !== "") {
+            html = maybeJson.data;
+            console.log("Rohit generate_summary response data (from json.data):", maybeJson.data);
+          } else if (typeof maybeJson.msg === "string") {
+            console.log("Rohit generate_summary response msg:", maybeJson.msg);
+          }
+        }
+      } catch (e) {
+        // bodyText is not JSON — keep it as-is (HTML)
+      }
 
-    
+      
       const blob = new Blob([html], { type: "text/html" });
       const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
+     
+      if (summaryBlobUrl) {
+        try {
+          URL.revokeObjectURL(summaryBlobUrl);
+        } catch (e) {
+          /* ignore */
+        }
+      }
+  setSummaryBlobUrl(url);
+  setSummaryHtml(html);
+  // remember which message this summary belongs to so we can render it
+  // inline beneath that message instead of showing a popup.
+  setSummaryForId(message.id);
     } catch (err: any) {
       console.error("Error generating summary:", err);
       alert(`Failed to generate summary: ${err?.message || err}`);
@@ -188,7 +225,8 @@ const ChatWindow: React.FC = () => {
               Welcome to StratSync
             </h1>
             <p className="text-lg text-gray-600 leading-relaxed mb-8">
-              Your AI co-pilot for customer success and growth. Ask me anything to get started!
+              Your AI co-pilot for customer success and growth. Ask me anything
+              to get started!
             </p>
           </div>
           <div className="w-full max-w-3xl">
@@ -206,15 +244,60 @@ const ChatWindow: React.FC = () => {
   return (
     <div className="flex flex-col h-screen max-w-full mx-auto bg-white shadow-lg">
       <Header />
+     
       <div className="flex-1 overflow-y-auto px-4 py-6 space-y-6">
         <div className="max-w-3xl mx-auto space-y-6">
           {messages.map((message) => (
-            <MessageBubble
-              key={message.id}
-              message={message}
-              onSummarize={() => handleSummarize(message)}
-              isSummarizing={summarizingId === message.id}
-            />
+            <div key={message.id}>
+              <MessageBubble
+                message={message}
+                onSummarize={() => handleSummarize(message)}
+                isSummarizing={summarizingId === message.id}
+              />
+
+              {summaryForId === message.id && summaryHtml && (
+                <div className="mt-2 p-3 bg-red-50 border rounded">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-sm font-semibold">Generated Summary</h4>
+                    <div className="flex items-center space-x-2">
+                      {summaryBlobUrl && (
+                        <a
+                          href={summaryBlobUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-sm px-3 py-1 border rounded bg-white"
+                        >
+                          Open in new tab
+                        </a>
+                      )}
+                      <button
+                        onClick={() => {
+                          if (summaryBlobUrl) {
+                            try {
+                              URL.revokeObjectURL(summaryBlobUrl);
+                            } catch (e) {
+                              /* ignore */
+                            }
+                          }
+                          setSummaryBlobUrl(null);
+                          setSummaryHtml(null);
+                          setSummaryForId(null);
+                        }}
+                        className="text-sm px-3 py-1 border rounded bg-white"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+
+                  <iframe
+                    title={`summary-${message.id}`}
+                    srcDoc={summaryHtml}
+                    className="w-full h-64 border-0"
+                  />
+                </div>
+              )}
+            </div>
           ))}
           {isTyping && <TypingIndicator />}
           <div ref={messagesEndRef} />

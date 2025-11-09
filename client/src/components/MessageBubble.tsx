@@ -6,6 +6,8 @@ interface Message {
   sender: "user" | "assistant";
   timestamp: Date;
   table?: Array<Record<string, any>>;
+  // original payload (optional) propagated from ChatWindow for summarization
+  originalRequestPayload?: any;
 }
 
 interface MessageBubbleProps {
