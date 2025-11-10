@@ -58,7 +58,7 @@ const ChatWindow: React.FC = () => {
       });
 
       console.log("Rohit test", response.status);
-      console.log("Rohit Response:", response);
+      console.log("Rohit Response:", response.json);
 
       if (!response.ok) {
         
@@ -73,6 +73,8 @@ const ChatWindow: React.FC = () => {
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
 
+        // If the API returns a payload with `data` that itself is a JSON string
+        // which decodes to an array, treat that as a table response.
         if (
           jsonData &&
           (jsonData.msg === "Success" || jsonData.data) &&
@@ -81,15 +83,15 @@ const ChatWindow: React.FC = () => {
           try {
             const parsed = JSON.parse(jsonData.data);
             if (Array.isArray(parsed)) {
-              data = "";
+              // store the parsed table in the message and also save the response
+              // payload so summarizer can access it later
               const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 content: "",
                 sender: "assistant",
                 timestamp: new Date(),
                 table: parsed,
-                
-                originalRequestPayload: { query: content },
+                originalRequestPayload: { query: content, response: parsed, raw: jsonData },
               };
 
               setMessages((prev) => [...prev, assistantMessage]);
@@ -97,27 +99,37 @@ const ChatWindow: React.FC = () => {
               return;
             }
           } catch (e) {
+            // fall back to stringifying the JSON payload
             data = JSON.stringify(jsonData);
           }
         }
 
-        data = jsonData.reply || JSON.stringify(jsonData);
+        // Prefer a `reply` field, otherwise stringify the full JSON
+        data = jsonData.reply || jsonData.data || JSON.stringify(jsonData);
+        // For debugging/consistency, keep the full json in originalRequestPayload
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: typeof data === "string" ? data : JSON.stringify(data),
+          sender: "assistant",
+          timestamp: new Date(),
+          originalRequestPayload: { query: content, response: data, raw: jsonData },
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
       } else {
+        // non-json response
         data = await response.text();
+
+        const assistantMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          content: data,
+          sender: "assistant",
+          timestamp: new Date(),
+          originalRequestPayload: { query: content, response: data },
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
       }
-
-      await new Promise((res) => setTimeout(res, 500));
-
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        content: data,
-        sender: "assistant",
-        timestamp: new Date(),
-      
-        originalRequestPayload: { query: content },
-      };
-
-      setMessages((prev) => [...prev, assistantMessage]);
     } catch (error: any) {
       console.error("Error sending message:", error);
       setMessages((prev) => [
@@ -142,12 +154,26 @@ const ChatWindow: React.FC = () => {
 
       const queryStr = orig && typeof orig.query === "string" ? orig.query : message.content || "";
 
-      // per current behavior the payload's `data` value is set below
-      // (was previously computed from orig/message.table/message.content)
-      const dataToSend = "string";
+      // Build dataToSend from what we saved on the message when the assistant
+      // response arrived. Prefer a saved `response`, then `message.table`, then
+      // the message text content, and finally fall back to the original query.
+      let dataToSend: any;
+      if (orig && orig.response !== undefined) {
+        dataToSend = orig.response;
+      } else if (message.table && Array.isArray(message.table) && message.table.length > 0) {
+        dataToSend = message.table;
+      } else if (message.content && message.content.trim() !== "") {
+        dataToSend = message.content;
+      } else {
+        dataToSend = queryStr;
+      }
 
-  const payload: any = { query: queryStr, data: dataToSend };
-
+      const payload: any = {
+        query: queryStr,
+   
+        data: typeof dataToSend === "string" ? dataToSend : JSON.stringify(dataToSend),
+      };
+     console.log("Rohit generate_summary payload:", payload);
       // console.log("Rohit generate_summary request payload:", payload);
       const resp = await fetch(`${BASE_URL}/generate_summary/`, {
         method: "POST",
