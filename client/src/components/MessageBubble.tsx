@@ -6,15 +6,15 @@ interface Message {
   sender: "user" | "assistant";
   timestamp: Date;
   table?: Array<Record<string, any>>;
-  // original payload (optional) propagated from ChatWindow for summarization
+ 
   originalRequestPayload?: any;
 }
 
 interface MessageBubbleProps {
   message: Message;
-  // optional callback invoked when user clicks Summarize for this message
+  
   onSummarize?: () => void;
-  // whether this message is currently being summarized (disable button)
+  
   isSummarizing?: boolean;
 }
 
@@ -30,8 +30,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onSummarize, isS
     const columns = Array.from(colSet);
 
     return (
-      <div className="overflow-x-auto mt-2">
-        <table className="min-w-full border-collapse">
+      <div className="overflow-x-auto ">
+        <table className="min-w-full border-collapse ">
           <thead>
             <tr>
               {columns.map((col) => (
@@ -87,7 +87,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onSummarize, isS
           }`}
         >
           {message.table ? (
-            // render table when structured table data is present
+            
             renderTable(message.table)
           ) : (
             <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
