@@ -266,7 +266,8 @@ const ChatWindow: React.FC = () => {
                   <iframe
                     title={`summary-${message.id}`}
                     srcDoc={summaryHtml}
-                    className="w-full h-64 border-0"
+                    className="w-full h-[80vh] border-0"
+
                   />
                 </div>
               )}
