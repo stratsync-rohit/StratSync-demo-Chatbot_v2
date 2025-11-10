@@ -4,7 +4,7 @@ import MessageBubble from "./MessageBubble";
 import InputBar from "./InputBar";
 import TypingIndicator from "./TypingIndicator";
 
-const BASE_URL = "http://136.110.18.214:8000";
+const BASE_URL = "https://dev-api.stratsync.ai";
 
 interface Message {
   id: string;

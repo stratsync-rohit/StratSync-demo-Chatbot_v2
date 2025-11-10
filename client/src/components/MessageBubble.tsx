@@ -30,8 +30,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onSummarize, isS
     const columns = Array.from(colSet);
 
     return (
-      <div className="overflow-x-auto ">
-        <table className="min-w-full border-collapse ">
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-full border-collapse table-auto">
           <thead>
             <tr>
               {columns.map((col) => (
@@ -75,7 +75,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onSummarize, isS
       )}
 
       <div
-        className={`max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl ${
+        className={`${message.table ? "w-full" : "max-w-xs sm:max-w-md lg:max-w-lg xl:max-w-xl"} ${
           isUser ? "order-first" : ""
         }`}
       >
@@ -87,7 +87,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = ({ message, onSummarize, isS
           }`}
         >
           {message.table ? (
-            
+            // For table messages we allow the table to take the full available width
             renderTable(message.table)
           ) : (
             <p className="text-sm sm:text-base leading-relaxed whitespace-pre-wrap break-words">
