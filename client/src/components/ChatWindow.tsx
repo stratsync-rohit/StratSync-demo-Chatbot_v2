@@ -15,6 +15,7 @@ interface Message {
   table?: Array<Record<string, any>>;
   originalRequestPayload?: any;
   canSummarize?: boolean;
+  isError?: boolean;
 }
 
 const ChatWindow: React.FC = () => {
@@ -74,8 +75,7 @@ const ChatWindow: React.FC = () => {
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
 
-        // If the API returns a payload with `data` that itself is a JSON string
-        // which decodes to an array, treat that as a table response.
+      
         if (
           jsonData &&
           (jsonData.msg === "Success" || jsonData.data) &&
@@ -84,8 +84,7 @@ const ChatWindow: React.FC = () => {
           try {
             const parsed = JSON.parse(jsonData.data);
             if (Array.isArray(parsed)) {
-              // store the parsed table in the message and also save the response
-              // payload so summarizer can access it later
+             
               const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 content: "",
@@ -101,18 +100,18 @@ const ChatWindow: React.FC = () => {
               return;
             }
           } catch (e) {
-            // fall back to stringifying the JSON payload
+          
             data = JSON.stringify(jsonData);
           }
         }
 
-        // Prefer a `reply` field, otherwise stringify the full JSON
+       
         data = jsonData.reply || jsonData.data || JSON.stringify(jsonData);
-        // compute canSummarize flag heuristically from `data`
+       
         let canSummarizeFlag = true;
         if (typeof data === "string") {
           canSummarizeFlag = data.trim() !== "";
-          // detect known 'no data' messages (may contain <br/> or curly apostrophes)
+          
           try {
             const normalized = data.replace(/<[^>]*>/g, "").replace(/\u2019/g, "'").toLowerCase();
             if (
@@ -186,8 +185,9 @@ const ChatWindow: React.FC = () => {
           content: `Error: ${error.message || "Please try again."}`,
           sender: "assistant",
           timestamp: new Date(),
-              // errors cannot be summarized
-              canSummarize: false,
+         
+          canSummarize: false,
+          isError: true,
           },
       ]);
     } finally {
@@ -196,6 +196,12 @@ const ChatWindow: React.FC = () => {
   };
 
   const handleSummarize = async (message: Message) => {
+  
+    if (message.isError) {
+      console.warn("Attempt to summarize an error message prevented.");
+      return;
+    }
+
     try {
       setSummarizingId(message.id);
 
@@ -203,9 +209,7 @@ const ChatWindow: React.FC = () => {
 
       const queryStr = orig && typeof orig.query === "string" ? orig.query : message.content || "";
 
-      // Build dataToSend from what we saved on the message when the assistant
-      // response arrived. Prefer a saved `response`, then `message.table`, then
-      // the message text content, and finally fall back to the original query.
+     
       let dataToSend: any;
       if (orig && orig.response !== undefined) {
         dataToSend = orig.response;
@@ -223,7 +227,7 @@ const ChatWindow: React.FC = () => {
         data: typeof dataToSend === "string" ? dataToSend : JSON.stringify(dataToSend),
       };
      console.log("Rohit generate_summary payload:", payload);
-      // console.log("Rohit generate_summary request payload:", payload);
+     
       const resp = await fetch(`${BASE_URL}/generate_summary/`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -233,7 +237,7 @@ const ChatWindow: React.FC = () => {
      
      
       const bodyText = await resp.text();
-      console.log("Rohit generate_summary raw response:", bodyText);
+      // console.log("Rohit generate_summary raw response:", bodyText);
 
       if (!resp.ok) {
         console.error("generate_summary server error:", bodyText);
@@ -334,7 +338,7 @@ const ChatWindow: React.FC = () => {
                 isSummarizing={summarizingId === message.id}
               />
 
-              {summaryForId === message.id && summaryHtml && (
+              {summaryForId === message.id && summaryHtml && !message.isError && (
                 <div className="mt-2 p-1 bg-white border rounded">
                   
 
