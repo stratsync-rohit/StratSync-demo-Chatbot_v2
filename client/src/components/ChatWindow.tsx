@@ -14,6 +14,7 @@ interface Message {
  
   table?: Array<Record<string, any>>;
   originalRequestPayload?: any;
+  canSummarize?: boolean;
 }
 
 const ChatWindow: React.FC = () => {
@@ -68,7 +69,7 @@ const ChatWindow: React.FC = () => {
       }
 
       const contentType = response.headers.get("content-type");
-      let data: string;
+  let data: any;
 
       if (contentType?.includes("application/json")) {
         const jsonData = await response.json();
@@ -92,6 +93,7 @@ const ChatWindow: React.FC = () => {
                 timestamp: new Date(),
                 table: parsed,
                 originalRequestPayload: { query: content, response: parsed, raw: jsonData },
+                canSummarize: Array.isArray(parsed) ? parsed.length > 0 : false,
               };
 
               setMessages((prev) => [...prev, assistantMessage]);
@@ -106,6 +108,21 @@ const ChatWindow: React.FC = () => {
 
         // Prefer a `reply` field, otherwise stringify the full JSON
         data = jsonData.reply || jsonData.data || JSON.stringify(jsonData);
+        // compute canSummarize flag heuristically from `data`
+        let canSummarizeFlag = true;
+        if (typeof data === "string") {
+          canSummarizeFlag = data.trim() !== "";
+        } else if (Array.isArray(data)) {
+          canSummarizeFlag = data.length > 0;
+        } else if (typeof data === "object") {
+          try {
+            canSummarizeFlag = Object.keys(data).length > 0;
+          } catch (e) {
+            canSummarizeFlag = !!data;
+          }
+        } else {
+          canSummarizeFlag = !!data;
+        }
         // For debugging/consistency, keep the full json in originalRequestPayload
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
@@ -113,6 +130,7 @@ const ChatWindow: React.FC = () => {
           sender: "assistant",
           timestamp: new Date(),
           originalRequestPayload: { query: content, response: data, raw: jsonData },
+          canSummarize: canSummarizeFlag,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
@@ -126,6 +144,7 @@ const ChatWindow: React.FC = () => {
           sender: "assistant",
           timestamp: new Date(),
           originalRequestPayload: { query: content, response: data },
+          canSummarize: typeof data === "string" ? data.trim() !== "" : !!data,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
@@ -139,7 +158,9 @@ const ChatWindow: React.FC = () => {
           content: `Error: ${error.message || "Please try again."}`,
           sender: "assistant",
           timestamp: new Date(),
-        },
+              // errors cannot be summarized
+              canSummarize: false,
+          },
       ]);
     } finally {
       setIsTyping(false);
