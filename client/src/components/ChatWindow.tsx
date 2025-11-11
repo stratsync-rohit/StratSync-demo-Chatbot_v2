@@ -112,6 +112,19 @@ const ChatWindow: React.FC = () => {
         let canSummarizeFlag = true;
         if (typeof data === "string") {
           canSummarizeFlag = data.trim() !== "";
+          // detect known 'no data' messages (may contain <br/> or curly apostrophes)
+          try {
+            const normalized = data.replace(/<[^>]*>/g, "").replace(/\u2019/g, "'").toLowerCase();
+            if (
+              normalized.includes("sorry") &&
+              normalized.includes("couldn") &&
+              normalized.includes("matching data")
+            ) {
+              canSummarizeFlag = false;
+            }
+          } catch (e) {
+            /* ignore */
+          }
         } else if (Array.isArray(data)) {
           canSummarizeFlag = data.length > 0;
         } else if (typeof data === "object") {
@@ -138,13 +151,28 @@ const ChatWindow: React.FC = () => {
         // non-json response
         data = await response.text();
 
+        // check for known 'no data' message and treat it as non-summarizable
+        let nonJsonCanSummarize = typeof data === "string" ? data.trim() !== "" : !!data;
+        try {
+          const normalized = data.replace(/<[^>]*>/g, "").replace(/\u2019/g, "'").toLowerCase();
+          if (
+            normalized.includes("sorry") &&
+            normalized.includes("couldn") &&
+            normalized.includes("matching data")
+          ) {
+            nonJsonCanSummarize = false;
+          }
+        } catch (e) {
+          /* ignore */
+        }
+
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
           content: data,
           sender: "assistant",
           timestamp: new Date(),
           originalRequestPayload: { query: content, response: data },
-          canSummarize: typeof data === "string" ? data.trim() !== "" : !!data,
+          canSummarize: nonJsonCanSummarize,
         };
 
         setMessages((prev) => [...prev, assistantMessage]);
